@@ -7,7 +7,6 @@
     <title>מערכת סידור עבודה</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
-        xintegrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoVBL5gI9kDXOkubaG5er1LmkB5QPA=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -76,8 +75,8 @@
         /* Draggable employees in the list */
         .draggable-employee-source {
             cursor: grab;
-            transition: background-color: 0.2s;
-        }
+            transition: background-time: 0.2s;
+        } 
         .draggable-employee-source:hover {
             background-color: #f0f9ff; /* sky-50 */
         }
@@ -86,6 +85,25 @@
         }
         .dragging {
             opacity: 0.5;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            transition: opacity 0.3s, transform 0.3s;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .notification.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(10px);
         }
     </style>
 </head>
@@ -134,7 +152,7 @@
                             <h2 class="text-2xl font-semibold">סידור עבודה שבועי</h2>
                             <input type="date" id="week-start-date" class="p-2 border rounded-md bg-gray-50">
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 flex-wrap justify-center">
                              <button id="generate-schedule-btn"
                                 class="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 font-semibold transition shadow-lg">
                                 הפק סידור אוטומטי
@@ -142,6 +160,10 @@
                             <button id="download-schedule-btn"
                                 class="bg-teal-500 text-white px-6 py-2 rounded-md hover:bg-teal-600 font-semibold transition shadow-lg">
                                 הורד כתמונה
+                            </button>
+                             <button id="reset-schedule-btn"
+                                class="bg-red-500 text-white px-6 py-2 rounded-md hover:bg-red-600 font-semibold transition shadow-lg">
+                                איפוס סידור
                             </button>
                         </div>
                     </div>
@@ -193,13 +215,13 @@
                              <div>
                                 <label for="max-shifts" class="block text-sm font-medium text-gray-700">מקסימום
                                     משמרות בשבוע</label>
-                                <input type="number" id="max-shifts" min="1" max="7" value="4"
+                                <input type="number" id="max-shifts" min="1" max="20" value="4"
                                     class="mt-1 block w-full p-2 border rounded-md">
                             </div>
                             <div>
                                 <label for="max-weekends" class="block text-sm font-medium text-gray-700">מקסימום
                                     סופ"שים בחודש (מוערך)</label>
-                                <input type="number" id="max-weekends" min="0" max="4" value="2"
+                                <input type="number" id="max-weekends" min="0" max="10" value="2"
                                     class="mt-1 block w-full p-2 border rounded-md">
                             </div>
                             <div class="flex items-center">
@@ -232,6 +254,25 @@
         </div>
     </div>
 
+    <!-- Employee Assignment Modal (for touch devices) -->
+    <div id="assignment-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md transform transition-all scale-95 opacity-0"
+            id="assignment-modal-content">
+            <h3 id="assignment-modal-title" class="text-2xl font-bold mb-6">שיבוץ עובדים למשמרת</h3>
+            <div id="assignment-employee-list" class="space-y-3 max-h-80 overflow-y-auto">
+                <!-- Employee checkboxes will be injected here -->
+            </div>
+            <!-- Actions -->
+            <div class="mt-8 flex justify-end gap-3">
+                <button type="button" id="cancel-assignment-btn"
+                    class="bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400">ביטול</button>
+                <button type="button" id="save-assignment-btn"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">שמור שיבוץ</button>
+            </div>
+        </div>
+    </div>
+
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- STATE MANAGEMENT ---
@@ -241,23 +282,38 @@
             ];
             let employees = [
                  {
-                    id: 'emp_1', name: 'ישראל ישראלי', rating: 5, preferredStore: 'store_1',
-                    rules: { maxShifts: 4, maxWeekends: 1, noEvenings: false, noDoubles: true, daysOff: ['ראשון'] }
+                    id: 'emp_1', name: 'איתי כדורי', rating: 5, preferredStore: 'any',
+                    rules: { maxShifts: 30, maxWeekends: 4, noEvenings: false, noDoubles: true, daysOff: [] }
                 },
                 {
-                    id: 'emp_2', name: 'משה כהן', rating: 4, preferredStore: 'store_2',
-                    rules: { maxShifts: 5, maxWeekends: 2, noEvenings: true, noDoubles: true, daysOff: [] }
+                    id: 'emp_2', name: 'שרון כדורי', rating: 5, preferredStore: 'store_1',
+                    rules: { maxShifts: 30, maxWeekends: 3, noEvenings: true, noDoubles: true, daysOff: [] }
                 },
                 {
-                    id: 'emp_3', name: 'דנה לוי', rating: 4, preferredStore: 'any',
-                    rules: { maxShifts: 3, maxWeekends: 1, noEvenings: false, noDoubles: false, daysOff: ['רביעי', 'חמישי'] }
-                }
+                    id: 'emp_3', name: 'מיטל חסון', rating: 5, preferredStore: 'any',
+                    rules: { maxShifts: 30, maxWeekends: 3, noEvenings: false, noDoubles: false, daysOff: [] }
+                },
+                {
+                    id: 'emp_4', name: 'לירן', rating: 5, preferredStore: 'any',
+                    rules: { maxShifts: 30, maxWeekends: 3, noEvenings: false, noDoubles: true, daysOff: [] }
+                },
+                {
+                    id: 'emp_5', name: 'רוי סער', rating: 5, preferredStore: 'any',
+                    rules: { maxShifts: 30, maxWeekends: 2, noEvenings: true, noDoubles: true, daysOff: [] }
+                },
+                {
+                    id: 'emp_4', name: 'אבירם פאר חליגוא', rating: 5, preferredStore: 'any',
+                    rules: { maxShifts: 30, maxWeekends: 3, noEvenings: false, noDoubles: true, daysOff: [] }
+                },
+                
             ];
             let unavailableShifts = new Set(); // e.g., "ראשון-store_1-בוקר"
             let schedule = {}; // This will hold the generated schedule data
 
             const daysOfWeek = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
             const shifts = ['בוקר', 'ערב'];
+            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
 
             // --- LOCAL STORAGE FUNCTIONS ---
             function saveStateToLocalStorage() {
@@ -297,8 +353,16 @@
             const cancelEmployeeBtn = document.getElementById('cancel-employee-btn');
             const generateScheduleBtn = document.getElementById('generate-schedule-btn');
             const downloadScheduleBtn = document.getElementById('download-schedule-btn');
+            const resetScheduleBtn = document.getElementById('reset-schedule-btn');
             const scheduleTable = document.getElementById('schedule-table');
             const preferredStoreSelect = document.getElementById('employee-preferred-store');
+            const assignmentModal = document.getElementById('assignment-modal');
+            const assignmentModalContent = document.getElementById('assignment-modal-content');
+            const assignmentModalTitle = document.getElementById('assignment-modal-title');
+            const assignmentEmployeeList = document.getElementById('assignment-employee-list');
+            const cancelAssignmentBtn = document.getElementById('cancel-assignment-btn');
+            const saveAssignmentBtn = document.getElementById('save-assignment-btn');
+
 
             // --- INITIALIZATION ---
             function init() {
@@ -344,8 +408,11 @@
             }
 
             function renderEmployees() {
+                const draggableAttr = isTouchDevice ? '' : 'draggable="true"';
+                const sourceClass = isTouchDevice ? '' : 'draggable-employee-source';
+
                 employeesList.innerHTML = employees.map(emp => `
-                    <div class="p-4 border rounded-lg bg-gray-50 shadow-sm draggable-employee-source" draggable="true" data-employee-json='${JSON.stringify(emp)}'>
+                    <div class="p-4 border rounded-lg bg-gray-50 shadow-sm ${sourceClass}" ${draggableAttr} data-employee-json='${JSON.stringify(emp)}'>
                         <div class="flex justify-between items-start pointer-events-none">
                             <div>
                                 <p class="font-bold text-lg">${emp.name}</p>
@@ -362,6 +429,7 @@
             }
             
             function renderScheduleTableShell() {
+                const draggableAttr = isTouchDevice ? '' : 'draggable="true"';
                 let thead = `<thead><tr class="bg-gray-200">
                     <th class="p-2 border">יום</th>
                     <th class="p-2 border">משמרת</th>
@@ -390,7 +458,7 @@
                             let cellContent = '';
                             if (employeesInSlot.length > 0) {
                                 cellContent = employeesInSlot.map(emp => `
-                                    <div class="employee-pill" draggable="true" data-employee-json='${JSON.stringify(emp)}' data-source-slot-id="${slotId}">
+                                    <div class="employee-pill" ${draggableAttr} data-employee-json='${JSON.stringify(emp)}' data-source-slot-id="${slotId}">
                                         ${emp.name.split(' ')[0]}
                                     </div>
                                 `).join('');
@@ -465,23 +533,36 @@
                 employeesList.addEventListener('click', handleEmployeeActions);
                 generateScheduleBtn.addEventListener('click', handleGenerateSchedule);
                 downloadScheduleBtn.addEventListener('click', handleDownloadSchedule);
+                resetScheduleBtn.addEventListener('click', handleResetSchedule);
 
+                cancelAssignmentBtn.addEventListener('click', closeAssignmentModal);
+                saveAssignmentBtn.addEventListener('click', handleSaveAssignment);
+                assignmentModal.addEventListener('click', (e) => { if (e.target.id === 'assignment-modal') closeAssignmentModal(); });
+
+                // Combined click handler for the schedule table
                 scheduleTable.addEventListener('click', (e) => {
                     const toggle = e.target.closest('.slot-toggle');
-                    if (toggle) {
-                        const cell = toggle.closest('td');
-                        if (cell) handleToggleSlot(cell.dataset.slotId, cell);
+                    const slotCell = e.target.closest('td[data-slot-id]');
+
+                    if (toggle && slotCell) {
+                        handleToggleSlot(slotCell.dataset.slotId);
+                    } else if (isTouchDevice && slotCell) {
+                        if (!toggle) { // Prevent opening modal if the toggle icon was clicked
+                            handleSlotClick(slotCell.dataset.slotId);
+                        }
                     }
                 });
 
-                // Drag and Drop Listeners
-                document.addEventListener('dragstart', handleDragStart);
-                scheduleTable.addEventListener('dragover', handleDragOver);
-                scheduleTable.addEventListener('dragleave', handleDragLeave);
-                scheduleTable.addEventListener('drop', handleDrop);
-                document.addEventListener('dragend', () => {
-                    document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
-                });
+                if (!isTouchDevice) {
+                    // Use drag & drop only for mouse devices
+                    document.addEventListener('dragstart', handleDragStart);
+                    scheduleTable.addEventListener('dragover', handleDragOver);
+                    scheduleTable.addEventListener('dragleave', handleDragLeave);
+                    scheduleTable.addEventListener('drop', handleDrop);
+                    document.addEventListener('dragend', () => {
+                        document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+                    });
+                }
             }
             
             // --- HANDLERS ---
@@ -606,7 +687,15 @@
                 });
             }
 
-            function handleToggleSlot(slotId, cell) {
+             function handleResetSchedule() {
+                // We don't use window.confirm because it can be blocked in sandboxed environments.
+                // A simple reset is better than a complex custom modal for this feature.
+                initializeSchedule();
+                renderScheduleTableShell();
+            }
+
+
+            function handleToggleSlot(slotId) {
                 if (unavailableShifts.has(slotId)) {
                     unavailableShifts.delete(slotId);
                 } else {
@@ -617,8 +706,115 @@
                 saveStateToLocalStorage();
                 renderScheduleTableShell();
             }
+
+            // --- NOTIFICATION ---
+            function showNotification(message, type = 'error') {
+                const notification = document.createElement('div');
+                notification.className = 'notification';
+                notification.textContent = message;
+                
+                notification.style.backgroundColor = type === 'error' ? '#ef4444' : '#22c55e';
+
+                document.body.appendChild(notification);
+                setTimeout(() => notification.classList.add('show'), 10);
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    notification.addEventListener('transitionend', () => notification.remove());
+                }, 3000);
+            }
             
-            // --- DRAG & DROP HANDLERS ---
+            // --- TOUCH UI HANDLERS ---
+            function handleSlotClick(slotId) {
+                if (unavailableShifts.has(slotId)) return;
+                openAssignmentModal(slotId);
+            }
+
+            function openAssignmentModal(slotId) {
+                const [day, storeId, shift] = slotId.split('-');
+                const storeName = stores.find(s => s.id === storeId)?.name || '';
+                assignmentModalTitle.textContent = `שיבוץ ל${storeName} - ${day}, ${shift}`;
+
+                const assignedEmployeeIds = new Set(schedule[day][storeId][shift].map(emp => emp.id));
+
+                assignmentEmployeeList.innerHTML = employees.map(emp => {
+                    const isAssignedToThisSlot = assignedEmployeeIds.has(emp.id);
+                    
+                    let conflictStoreName = null;
+                    for (const otherStore of stores) {
+                        if (otherStore.id !== storeId) {
+                            if (schedule[day][otherStore.id][shift].some(e => e.id === emp.id)) {
+                                conflictStoreName = otherStore.name;
+                                break;
+                            }
+                        }
+                    }
+
+                    const isDisabled = conflictStoreName !== null;
+                    const checkedAttr = isAssignedToThisSlot ? 'checked' : '';
+                    const disabledAttr = isDisabled ? 'disabled' : '';
+                    const labelClass = isDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 cursor-pointer';
+                    const conflictText = isDisabled ? `<span class="text-sm text-red-500 font-semibold">(ב${conflictStoreName})</span>` : '';
+                    const ratingStars = '⭐'.repeat(emp.rating);
+
+                    return `
+                        <label class="flex items-center justify-between p-2 rounded-md ${labelClass}">
+                            <div class="flex items-center">
+                                <input type="checkbox" data-employee-json='${JSON.stringify(emp)}' class="h-5 w-5 rounded-md text-blue-600 focus:ring-blue-500 assignment-checkbox" ${checkedAttr} ${disabledAttr}>
+                                <span class="ml-3 text-gray-800">${emp.name}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                ${conflictText}
+                                <span class="text-sm text-gray-500">${ratingStars}</span>
+                            </div>
+                        </label>
+                    `;
+                }).join('');
+
+                assignmentModal.dataset.slotId = slotId;
+
+                assignmentModal.classList.remove('hidden');
+                assignmentModal.classList.add('flex');
+                setTimeout(() => assignmentModalContent.classList.remove('scale-95', 'opacity-0'), 10);
+            }
+
+            function closeAssignmentModal() {
+                assignmentModalContent.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    assignmentModal.classList.add('hidden');
+                    assignmentModal.classList.remove('flex');
+                }, 200);
+            }
+
+            function handleSaveAssignment() {
+                const slotId = assignmentModal.dataset.slotId;
+                if (!slotId) return;
+
+                const [day, storeId, shift] = slotId.split('-');
+                
+                const selectedEmployees = [];
+                document.querySelectorAll('.assignment-checkbox:checked').forEach(checkbox => {
+                    selectedEmployees.push(JSON.parse(checkbox.dataset.employeeJson));
+                });
+
+                // Validation: Check for double booking (still useful as a safeguard)
+                for (const selectedEmp of selectedEmployees) {
+                    for (const otherStore of stores) {
+                        if (otherStore.id !== storeId) { // Check other stores
+                            if (schedule[day][otherStore.id][shift].some(emp => emp.id === selectedEmp.id)) {
+                                showNotification(`${selectedEmp.name} כבר משובצ/ת ב${otherStore.name} באותה משמרת.`);
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                schedule[day][storeId][shift] = selectedEmployees.map(emp => ({id: emp.id, name: emp.name}));
+                renderScheduleTableShell();
+                closeAssignmentModal();
+            }
+
+
+            // --- DRAG & DROP HANDLERS (Desktop only) ---
             function handleDragStart(e) {
                 const target = e.target;
                 if (target.matches('.draggable-employee-source, .employee-pill')) {
@@ -663,9 +859,7 @@
 
                 const [tDay, tStoreId, tShift] = targetSlotId.split('-');
                 
-                // --- Double Booking Prevention ---
                 const isAlreadyWorkingSameTime = stores.some(store => {
-                    // Check if employee is in another store at the same day and shift
                     return schedule[tDay][store.id][tShift].some(emp => emp.id === employee.id);
                 });
 
@@ -673,18 +867,15 @@
                 const isMoveInSameTimeSlot = (tDay === sDay && tShift === sShift);
 
                 if(isAlreadyWorkingSameTime && !isMoveInSameTimeSlot) {
-                    console.warn(`Cannot schedule ${employee.name}. Already working at this time.`);
-                    return; // Abort drop
+                    showNotification(`${employee.name} כבר משובצ/ת בחנות אחרת באותה משמרת.`);
+                    return;
                 }
-                // --- End of Prevention ---
 
-                // Remove from source if it's a move from another slot
                 if (sourceSlotId) {
                     const [sDay, sStoreId, sShift] = sourceSlotId.split('-');
                     schedule[sDay][sStoreId][sShift] = schedule[sDay][sStoreId][sShift].filter(emp => emp.id !== employee.id);
                 }
 
-                // Add to target if not already there
                 const targetArray = schedule[tDay][tStoreId][tShift];
                 if (!targetArray.some(emp => emp.id === employee.id)) {
                     targetArray.push(employee);
@@ -736,7 +927,7 @@
                         }
 
                     } else {
-                        schedule[slot.day][slot.storeId][slot.shift].isUnassigned = true;
+                        schedule[slot.day][store.id][slot.shift].isUnassigned = true;
                     }
                 });
 
@@ -757,7 +948,6 @@
                     }
                     const isWeekend = slot.day === 'שישי' || slot.day === 'שבת';
                     if (isWeekend && (stats[emp.id].weekends + 0.5 > emp.rules.maxWeekends)) return false;
-                    // Prevents double booking in the same shift across different stores
                     for (const store of stores) {
                         if (currentSchedule[slot.day][store.id][slot.shift].some(e => e.id === emp.id)) return false;
                     }
